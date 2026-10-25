@@ -27,7 +27,6 @@ packages = ["src/daz_resolver"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-qt_api = "pyside6"
 
 [tool.ruff]
 line-length = 100

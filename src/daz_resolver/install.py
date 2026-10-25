@@ -72,6 +72,9 @@ def install(
     root = Path(plan.destination).absolute()
     safe_target(root.parent, root.name)
     products = {p.id: p for p in plan.products}
+    required = {e.path.casefold() for p in plan.products for e in p.files}
+    if required != {op.path.casefold() for op in plan.operations}:
+        raise ResolverError("Plan does not contain whole selected products")
     for product in plan.products:
         source = Path(product.source).resolve()
         if root.resolve().is_relative_to(source) or source.is_relative_to(root.resolve()):
@@ -83,6 +86,8 @@ def install(
         seen.add(op.path.casefold())
         if op.product not in products or op.entry not in products[op.product].files:
             raise ResolverError("Invalid plan product/entry")
+        if op.path.casefold() != op.entry.path.casefold():
+            raise ResolverError("Plan cannot remap product files")
         if op.action not in {"copy", "skip", "keep", "replace"}:
             raise ResolverError("Invalid plan action")
         if (
@@ -129,6 +134,7 @@ def install(
     records = safe_target(root, RECORDS)
     if records.exists():
         for old in records.glob("*/journal.json"):
+            safe_target(root, old.relative_to(root).as_posix())
             if json.loads(old.read_text(encoding="utf-8"))["status"] in {
                 "installing",
                 "recovery-needed",

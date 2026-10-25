@@ -250,3 +250,55 @@ def test_cli_json_and_install_agree(fixture, tmp_path):
     result = runner.invoke(app, ["install", str(output)])
     assert result.exit_code == 0, result.output
     assert json.loads(result.stdout)["written"] == 5
+
+
+def test_added_source_file_stales_whole_product_plan(fixture):
+    source, _, destination = fixture
+    plan = make_plan(index_sources([source]), destination)
+    (source / "Extracted/People/new.txt").write_text("new whole-product file")
+    with pytest.raises(ResolverError, match="inventory changed"):
+        install(plan)
+    assert not destination.exists()
+
+
+def test_edited_plan_cannot_omit_or_remap_product_files(fixture):
+    source, _, destination = fixture
+    plan = make_plan(index_sources([source]), destination)
+    plan.operations.pop()
+    with pytest.raises(ResolverError, match="whole selected products"):
+        install(plan)
+    plan = make_plan(index_sources([source]), destination)
+    plan.operations[0].path = "other.txt"
+    with pytest.raises(ResolverError):
+        install(plan)
+
+
+def test_wrapper_documentation_preserved(tmp_path):
+    product = tmp_path / "product"
+    (product / "Content/People").mkdir(parents=True)
+    (product / "Content/People/a.txt").write_text("content")
+    (product / "Documentation").mkdir()
+    (product / "Documentation/a.txt").write_text("docs")
+    (product / "Manifest.dsx").write_text("plumbing")
+    inventory = index_sources([product])
+    assert {e.path for e in inventory.products[0].files} == {"People/a.txt", "Documentation/a.txt"}
+
+
+def test_archive_resource_limit(tmp_path, monkeypatch):
+    import daz_resolver.index as module
+
+    monkeypatch.setattr(module, "MAX_FILE_BYTES", 5)
+    archive = tmp_path / "large.zip"
+    with zipfile.ZipFile(archive, "w") as z:
+        z.writestr("Content/data/file", b"too large")
+    inventory = index_sources([archive])
+    assert not inventory.products
+    assert "resource limit" in inventory.reports[0]
+
+
+def test_gzip_scene_and_indirect_cycle(fixture):
+    source, scene, destination = fixture
+    scene.write_bytes(gzip.compress(scene.read_bytes()))
+    plan = make_plan(index_sources([source]), destination, [scene])
+    assert len(plan.products) == 2
+    assert not plan.blocked

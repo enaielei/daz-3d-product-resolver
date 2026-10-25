@@ -90,11 +90,12 @@ def discover(appdata: Path | None = None, public: Path | None = None) -> dict:
             profiles.append(dim_profile(path, public / "DAZ 3D/InstallManager"))
         except (OSError, ValueError, configparser.Error) as exc:
             reports.append(f"{path}: {exc}")
+    settings = studio_settings()
     return {
         "dim_profiles": profiles,
-        "studio_settings": studio_settings(),
+        "studio_settings": settings,
         "reports": reports,
-        "selection_required": len(profiles) > 1,
+        "selection_required": len(profiles) > 1 or len(settings) > 1,
     }
 
 

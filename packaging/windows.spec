@@ -1,5 +1,14 @@
 # Build from repository root: uv run pyinstaller packaging/windows.spec --noconfirm
 from pathlib import Path
+import os
+import sys
+
+# Restrict build-time DLL lookup to Python, Qt and Windows. In particular, unrelated
+# tools on PATH can provide an incompatible icuuc.dll that shadows Windows system ICU.
+windows = Path(os.environ['SystemRoot'])
+os.environ['PATH'] = os.pathsep.join(map(str, [
+    Path(sys.prefix) / 'Scripts', Path(sys.base_prefix), windows / 'System32', windows,
+]))
 
 root = Path(SPECPATH).parent
 a = Analysis(
