@@ -1,0 +1,16 @@
+name: Bug report
+description: Report a reproducible resolver problem using synthetic content
+body:
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and observed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Synthetic reproduction and platform
+      description: Do not include purchased assets, personal paths or account data.
+    validations:
+      required: true

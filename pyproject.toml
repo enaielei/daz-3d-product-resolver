@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "daz-3d-product-resolver"
+version = "0.1.0"
+description = "Offline whole-product dependency resolver for DAZ content libraries"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{name = "enaielei"}]
+dependencies = ["typer>=0.16,<1", "defusedxml>=0.7,<1"]
+
+[project.optional-dependencies]
+desktop = ["PySide6>=6.8,<7"]
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "pytest-qt>=4.4,<5", "ruff>=0.11,<1", "pyinstaller>=6.12,<7"]
+
+[project.scripts]
+daz-3d-product-resolver = "daz_resolver.cli:app"
+daz-3d-product-resolver-desktop = "daz_resolver.ui:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/daz_resolver"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+qt_api = "pyside6"
+
+[tool.ruff]
+line-length = 100
+extend-exclude = ["work", "outputs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
