@@ -19,8 +19,10 @@ def main():
     )
     output = ROOT / "dist/Daz3DProductResolver"
     shutil.copytree(ROOT / "packaging/licenses", output / "licenses/Qt", dirs_exist_ok=True)
-    for name in ("LICENSE", "README.md", "THIRD_PARTY_NOTICES.md", "uv.lock"):
+    for name in ("LICENSE", "THIRD_PARTY_NOTICES.md", "uv.lock"):
         shutil.copyfile(ROOT / name, output / name)
+    shutil.copyfile(ROOT / "packaging/windows-readme.md", output / "README.md")
+    shutil.copytree(ROOT / "docs", output / "docs", dirs_exist_ok=True)
     for name in (
         "PySide6",
         "PySide6_Essentials",

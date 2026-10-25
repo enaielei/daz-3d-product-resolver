@@ -41,6 +41,9 @@ space until manually reviewed and removed. No DIM registration or Smart Content 
 
 Qt runs discovery, indexing, planning and installation on background workers. Cancellation
 is cooperative at file boundaries; hashing/reading a large file can delay cancellation.
-The review surface displays the complete JSON plan and accepts explicit per-file decisions.
+The desktop guides users through content, libraries, then review/install. Product tables,
+summary counts and plain-language notices are the default. Ambiguities/conflicts use dropdowns;
+each decision invalidates the reviewed plan until the user checks again. The complete JSON plan
+remains in an optional technical-details panel. Folder and mode changes invalidate installation.
 Core CI on three OSes is distinct from desktop acceptance: only Windows is a packaging target.
 Real source previews are local private outputs, never committed or used for installation tests.

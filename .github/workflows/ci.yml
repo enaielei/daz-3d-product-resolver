@@ -3,6 +3,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
 permissions:
   contents: read
 jobs:
@@ -36,6 +37,11 @@ jobs:
       - run: uv run pytest tests/test_ui.py
       - run: uv run python packaging/build_windows.py
       - shell: pwsh
+        run: ./packaging/prepare_inno.ps1
+      - run: uv run python packaging/build_release.py --iscc work/tools/inno/ISCC.exe
+      - shell: pwsh
+        run: ./packaging/smoke_installer.ps1 -Installer dist/release/Daz3DProductResolver-0.1.0-windows-x64-setup.exe
+      - shell: pwsh
         run: |
           $process = Start-Process dist/Daz3DProductResolver/Daz3DProductResolver.exe -ArgumentList '--smoke-test' -WindowStyle Hidden -PassThru
           if (-not $process.WaitForExit(30000)) { $process.Kill(); throw 'Smoke test timed out' }
@@ -44,3 +50,7 @@ jobs:
         with:
           name: Windows-desktop
           path: dist/Daz3DProductResolver/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Windows-release
+          path: dist/release/
