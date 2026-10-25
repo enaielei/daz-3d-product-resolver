@@ -118,10 +118,6 @@ def install(
         )
         if refreshed.files != product.files:
             raise ResolverError(f"Source inventory changed: {product.source}; re-plan")
-        for entry in product.files:
-            if cancel():
-                raise ResolverError("Cancelled")
-            product.read(entry)
     pending = [o for o in plan.operations if o.action in {"copy", "replace"}]
     if not pending:
         return {"status": "verified", "written": 0, "journal": None}
@@ -156,7 +152,8 @@ def install(
             current = file_digest(target) if target.exists() else None
             if current != op.expected:
                 raise ResolverError(f"Destination changed during install: {op.path}")
-            data = products[op.product].read(op.entry)
+            temporary = transaction / "payload.tmp"
+            products[op.product].stage(op.entry, temporary, cancel)
             backup = None
             if op.action == "replace":
                 backup = f"backup/{i}"
@@ -173,11 +170,6 @@ def install(
             )
             save_journal(journal, state)
             target.parent.mkdir(parents=True, exist_ok=True)
-            temporary = transaction / "payload.tmp"
-            with temporary.open("wb") as stream:
-                stream.write(data)
-                stream.flush()
-                os.fsync(stream.fileno())
             safe_target(root, op.path)
             os.replace(temporary, target)
             if file_digest(target) != op.entry.sha256:

@@ -34,7 +34,7 @@ jobs:
           python-version: '3.12'
       - run: uv sync --locked --all-extras
       - run: uv run pytest tests/test_ui.py
-      - run: uv run pyinstaller packaging/windows.spec --noconfirm
+      - run: uv run python packaging/build_windows.py
       - shell: pwsh
         run: |
           $process = Start-Process dist/Daz3DProductResolver/Daz3DProductResolver.exe -ArgumentList '--smoke-test' -WindowStyle Hidden -PassThru

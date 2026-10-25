@@ -35,11 +35,12 @@ Keep source/destination trees idle during installation. See [limitations](docs/a
 uv run ruff check .
 uv run ruff format --check .
 uv run pytest
-uv run pyinstaller packaging/windows.spec --noconfirm
+uv run python packaging/build_windows.py
 ```
 
 The locked [PyInstaller](https://pyinstaller.org/en/stable/usage.html) build produces a
-Windows folder application under `dist/`. Build on Windows; do not cross-compile.
+Windows folder application under `dist/`, including dependency license texts. Build on Windows;
+do not cross-compile. See [third-party notices](THIRD_PARTY_NOTICES.md).
 CI exercises the portable engine on Windows, Linux and macOS and builds/smoke-tests Windows.
 These checks do not establish acceptance with real libraries on every platform.
 

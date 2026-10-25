@@ -167,7 +167,7 @@ def make_plan(
                 product, entry = candidates[0]
                 selected[product.id] = product
                 if Path(name).suffix.casefold() in DSON_SUFFIXES:
-                    queue.append((entry.path, product.read(entry)))
+                    queue.append((entry.path, product.read(entry, MAX_DSON_BYTES)))
             except (OSError, ValueError, BadZipFile, RuntimeError) as exc:
                 plan.reports.append(f"ERROR: {name}: {exc}")
     plan.products = list(selected.values())

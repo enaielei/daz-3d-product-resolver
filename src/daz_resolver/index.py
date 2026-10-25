@@ -1,6 +1,7 @@
 """Read-only inventories of whole extracted products and ZIP packages."""
 
 import hashlib
+import os
 import stat
 import zipfile
 from collections.abc import Callable
@@ -50,7 +51,7 @@ class Product:
     archive: bool
     files: list[Entry]
 
-    def read(self, entry: Entry) -> bytes:
+    def read(self, entry: Entry, limit: int = MAX_FILE_BYTES) -> bytes:
         source = Path(self.source)
         safe_target(source.parent, source.name)
         if self.archive:
@@ -60,14 +61,46 @@ class Product:
                 if info.file_size != entry.size:
                     raise ResolverError(f"Source changed: {source}")
                 with archive.open(info) as stream:
-                    data = stream.read(MAX_FILE_BYTES + 1)
+                    data = stream.read(min(entry.size, limit) + 1)
         else:
-            data = safe_target(source, entry.member).read_bytes()
+            with safe_target(source, entry.member).open("rb") as stream:
+                data = stream.read(min(entry.size, limit) + 1)
         actual = digest(data)
         if len(data) != entry.size or (entry.sha256 and actual != entry.sha256):
             raise ResolverError(f"Source changed: {source}: {entry.member}")
         entry.sha256 = actual
         return data
+
+    def stage(self, entry: Entry, temporary: Path, cancel: Callable[[], bool]):
+        """Stream and verify a payload into the transaction's staging file."""
+        source = Path(self.source)
+        safe_target(source.parent, source.name)
+        archive = zipfile.ZipFile(source) if self.archive else None
+        try:
+            if archive:
+                info = archive.getinfo(entry.member)
+                validate_member(info)
+                stream = archive.open(info)
+            else:
+                stream = safe_target(source, entry.member).open("rb")
+            h = hashlib.sha256()
+            size = 0
+            with stream, temporary.open("wb") as output:
+                while chunk := stream.read(1024 * 1024):
+                    if cancel():
+                        raise ResolverError("Cancelled")
+                    size += len(chunk)
+                    if size > entry.size:
+                        raise ResolverError("Source changed while staging")
+                    h.update(chunk)
+                    output.write(chunk)
+                output.flush()
+                os.fsync(output.fileno())
+            if size != entry.size or h.hexdigest() != entry.sha256:
+                raise ResolverError("Source changed while staging")
+        finally:
+            if archive:
+                archive.close()
 
 
 @dataclass
