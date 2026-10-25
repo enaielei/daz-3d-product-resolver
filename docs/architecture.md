@@ -6,7 +6,9 @@ is preserved. Empty DIM manifest/thumbnail overrides use inferred public shared 
 these are estimates, not evidence those folders exist. No account or configuration writes.
 Other versions, macOS and Linux settings layouts require additional adapters.
 
-`index` creates immutable inventories of extracted products and ZIPs. DIM Content-target
+`index` reads metadata inventories of extracted products and ZIPs. Payload hashes are streamed
+only for selected or competing products during planning; ZIPs remain unextracted. Installation
+revalidates full selected inventories and hashes. DIM Content-target
 manifest entries identify content; conventional wrappers are a fallback. Archive-level
 Manifest/Supplement plumbing is excluded, documentation inside content or recognized root
 documentation folders is copied. Application/plugin targets and known binary payloads are
@@ -15,6 +17,9 @@ Product IDs are local path-derived identifiers, not DAZ SKU claims.
 
 `dson` parses bounded plain/gzip JSON and static URL/image-file references, including
 image-library maps. It handles URI escaping, fragments, library-root and relative paths.
+Node-qualified references follow the official
+[DSON asset addressing specification](https://docs.daz3d.com/public/dson_spec/format_description/asset_addressing/start).
+Decoded DSON documents are bounded to 256 MiB; larger files are reported unsupported.
 Local fragment references do not create files. The graph follows referenced DUF/DSF files
 and detects cycles. Existing mapped libraries precede source lookup. Whole selected products
 are copied, but optional unreferenced presets do not expand the graph. This does not resolve

@@ -3,9 +3,10 @@
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from zipfile import BadZipFile
 
 from .dson import DSON_SUFFIXES, MAX_DSON_BYTES, references
-from .index import Entry, Inventory, Product
+from .index import Entry, Inventory, Product, materialize
 from .paths import ResolverError, file_digest, relative, safe_target
 
 
@@ -26,6 +27,7 @@ class Plan:
     missing: list[str] = field(default_factory=list)
     ambiguities: dict[str, list[str]] = field(default_factory=dict)
     reports: list[str] = field(default_factory=list)
+    configuration: dict = field(default_factory=dict)
 
     @property
     def estimated_bytes(self):
@@ -55,6 +57,7 @@ class Plan:
             data.get("missing", []),
             data.get("ambiguities", {}),
             data.get("reports", []),
+            data.get("configuration", {}),
         )
 
 
@@ -86,6 +89,11 @@ def make_plan(
 ) -> Plan:
     choices, conflicts = choices or {}, conflicts or {}
     plan = Plan(str(destination.absolute()) if destination else None, [], [])
+    plan.configuration = {
+        "sources": [{"path": p.source, "provenance": "user"} for p in inventory.products],
+        "libraries": [{"path": str(p), "provenance": "user"} for p in libraries or []],
+        "destination": {"path": str(destination) if destination else None, "provenance": "user"},
+    }
     plan.reports.extend(inventory.reports)
     if any("Ambiguous product boundary" in r for r in inventory.reports):
         plan.reports.append("ERROR: Explicit product roots required for ambiguous sources")
@@ -147,6 +155,9 @@ def make_plan(
                     if not candidates:
                         raise ResolverError(f"Invalid product choice for {name}")
                 # Full product inventories must agree, not merely the referenced file.
+                if len(candidates) > 1:
+                    for candidate, _ in candidates:
+                        materialize(candidate, cancel)
                 signatures = {
                     tuple((e.path.casefold(), e.sha256) for e in p.files) for p, _ in candidates
                 }
@@ -157,11 +168,16 @@ def make_plan(
                 selected[product.id] = product
                 if Path(name).suffix.casefold() in DSON_SUFFIXES:
                     queue.append((entry.path, product.read(entry)))
-            except (OSError, ValueError) as exc:
+            except (OSError, ValueError, BadZipFile, RuntimeError) as exc:
                 plan.reports.append(f"ERROR: {name}: {exc}")
     plan.products = list(selected.values())
     targets: dict[str, Operation] = {}
     for product in plan.products:
+        try:
+            materialize(product, cancel)
+        except (OSError, ValueError, BadZipFile, RuntimeError) as exc:
+            plan.reports.append(f"ERROR: {product.source}: {exc}")
+            continue
         for entry in product.files:
             key = entry.path.casefold()
             if key in targets:

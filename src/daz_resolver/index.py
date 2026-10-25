@@ -1,5 +1,6 @@
 """Read-only inventories of whole extracted products and ZIP packages."""
 
+import hashlib
 import stat
 import zipfile
 from collections.abc import Callable
@@ -8,7 +9,7 @@ from pathlib import Path
 
 from defusedxml import ElementTree
 
-from .paths import ResolverError, digest, file_digest, relative, safe_target
+from .paths import ResolverError, digest, relative, safe_target
 
 MAX_FILES = 200_000
 MAX_FILE_BYTES = 2 * 1024**3
@@ -62,8 +63,10 @@ class Product:
                     data = stream.read(MAX_FILE_BYTES + 1)
         else:
             data = safe_target(source, entry.member).read_bytes()
-        if len(data) != entry.size or digest(data) != entry.sha256:
+        actual = digest(data)
+        if len(data) != entry.size or (entry.sha256 and actual != entry.sha256):
             raise ResolverError(f"Source changed: {source}: {entry.member}")
+        entry.sha256 = actual
         return data
 
 
@@ -86,7 +89,44 @@ def validate_member(info: zipfile.ZipInfo):
         raise ResolverError(f"Archive resource limit: {info.filename}")
 
 
-def archive_product(path: Path) -> Product:
+def materialize(product: Product, cancel: Callable[[], bool] = lambda: False):
+    """Stream selected payload hashes, without extracting ZIPs or loading whole files."""
+    source = Path(product.source)
+    safe_target(source.parent, source.name)
+    archive = zipfile.ZipFile(source) if product.archive else None
+    try:
+        for entry in product.files:
+            if cancel():
+                raise ResolverError("Cancelled")
+            if entry.sha256:
+                continue
+            if archive:
+                info = archive.getinfo(entry.member)
+                validate_member(info)
+                if info.file_size != entry.size:
+                    raise ResolverError("Source changed during planning")
+                stream = archive.open(info)
+            else:
+                stream = safe_target(source, entry.member).open("rb")
+            h = hashlib.sha256()
+            size = 0
+            with stream:
+                for chunk in iter(lambda stream=stream: stream.read(1024 * 1024), b""):
+                    if cancel():
+                        raise ResolverError("Cancelled")
+                    size += len(chunk)
+                    if size > entry.size:
+                        raise ResolverError("Source changed during planning")
+                    h.update(chunk)
+            if size != entry.size:
+                raise ResolverError("Source changed during planning")
+            entry.sha256 = h.hexdigest()
+    finally:
+        if archive:
+            archive.close()
+
+
+def archive_product(path: Path, hash_files: bool = True) -> Product:
     entries = []
     with zipfile.ZipFile(path) as archive:
         infos = archive.infolist()
@@ -130,14 +170,16 @@ def archive_product(path: Path) -> Product:
         for member, target in sorted(selected.items()):
             if Path(target).suffix.casefold() in SOFTWARE_SUFFIXES:
                 raise ResolverError("Unsupported application/plugin installer payload")
-            data = archive.read(member)
-            entries.append(Entry(relative(target), member, len(data), digest(data)))
+            entries.append(Entry(relative(target), member, archive.getinfo(member).file_size, ""))
     if not entries:
         raise ResolverError("Empty/unsupported package")
-    return Product(digest(str(path).encode())[:16], str(path), True, entries)
+    product = Product(digest(str(path).encode())[:16], str(path), True, entries)
+    if hash_files:
+        materialize(product)
+    return product
 
 
-def extracted_product(path: Path) -> Product:
+def extracted_product(path: Path, hash_files: bool = True) -> Product:
     entries = []
     total = 0
     wrappers = [p for p in path.iterdir() if p.is_dir() and p.name.casefold() in WRAPPERS]
@@ -161,14 +203,18 @@ def extracted_product(path: Path) -> Product:
         total += size
         if size > MAX_FILE_BYTES or total > MAX_PACKAGE_BYTES or len(entries) >= MAX_FILES:
             raise ResolverError("Extracted product resource limit")
-        entries.append(Entry(target, name, size, file_digest(item)))
-    return Product(digest(str(path).encode())[:16], str(path), False, entries)
+        entries.append(Entry(target, name, size, ""))
+    product = Product(digest(str(path).encode())[:16], str(path), False, entries)
+    if hash_files:
+        materialize(product)
+    return product
 
 
 def index_sources(
     sources: list[Path],
     product_roots: list[Path] | None = None,
     cancel: Callable[[], bool] = lambda: False,
+    hash_files: bool = False,
 ) -> Inventory:
     result = Inventory()
     roots: set[Path] = set()
@@ -211,17 +257,25 @@ def index_sources(
             visit(child)
 
     for source in sources:
+        if cancel():
+            raise ResolverError("Cancelled")
         try:
             visit(source.absolute())
         except (OSError, ResolverError) as exc:
+            if cancel():
+                raise ResolverError("Cancelled") from exc
             result.reports.append(f"{source}: {exc}")
     for path in sorted(roots | archives):
         try:
-            product = archive_product(path) if path in archives else extracted_product(path)
+            if cancel():
+                raise ResolverError("Cancelled")
+            product = (archive_product if path in archives else extracted_product)(path, hash_files)
             keys = [entry.path.casefold() for entry in product.files]
             if len(keys) != len(set(keys)):
                 raise ResolverError("Case-colliding product files")
             result.products.append(product)
         except (OSError, ValueError, zipfile.BadZipFile, ElementTree.ParseError) as exc:
+            if cancel():
+                raise ResolverError("Cancelled") from exc
             result.reports.append(f"{path}: {exc}")
     return result

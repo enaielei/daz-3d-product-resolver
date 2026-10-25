@@ -88,6 +88,8 @@ def install(
             raise ResolverError("Invalid plan product/entry")
         if op.path.casefold() != op.entry.path.casefold():
             raise ResolverError("Plan cannot remap product files")
+        if len(op.entry.sha256) != 64:
+            raise ResolverError("Plan payload hashes required")
         if op.action not in {"copy", "skip", "keep", "replace"}:
             raise ResolverError("Invalid plan action")
         if (
@@ -183,6 +185,8 @@ def install(
             progress(i + 1, len(pending), op.path)
         # Final verification catches changes made while other files were being installed.
         for op in plan.operations:
+            if cancel():
+                raise ResolverError("Cancelled")
             expected = op.expected if op.action == "keep" else op.entry.sha256
             if file_digest(safe_target(root, op.path)) != expected:
                 raise ResolverError(f"Final verification failed: {op.path}")

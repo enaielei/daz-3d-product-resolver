@@ -77,7 +77,7 @@ class Window(QMainWindow):
             button.clicked.connect(lambda checked=False, k=key: self.browse(k))
             row.addWidget(button)
             layout.addLayout(row)
-            edit.textChanged.connect(self.invalidate)
+            edit.textChanged.connect(lambda _, k=key: self.changed(k))
         layout.addWidget(QLabel("Multiple paths use | separators. Inputs are user overrides."))
         row = QHBoxLayout()
         self.detect_button = QPushButton("Discover settings")
@@ -121,6 +121,10 @@ class Window(QMainWindow):
     def invalidate(self):
         self.plan = None
         self.install_button.setEnabled(False)
+
+    def changed(self, key):
+        self.inputs[key].setProperty("provenance", "user")
+        self.invalidate()
 
     def paths(self, key):
         return [Path(p.strip()) for p in self.inputs[key].text().split("|") if p.strip()]
@@ -203,12 +207,15 @@ class Window(QMainWindow):
             )
             self.inputs["source"].setText(" | ".join(map(str, sources)))
             self.inputs["library"].setText(" | ".join(map(str, libraries)))
+            self.inputs["source"].setProperty("provenance", "detected")
+            self.inputs["library"].setProperty("provenance", "detected")
         except ValueError as exc:
             self.output.setPlainText(str(exc))
 
     def build_plan(self):
         self.invalidate()
         paths = {k: self.paths(k) for k in self.inputs}
+        provenance = {k: edit.property("provenance") or "user" for k, edit in self.inputs.items()}
         try:
             choices = pairs([p.strip() for p in self.choices.text().split("|") if p.strip()])
             conflicts = pairs([p.strip() for p in self.conflicts.text().split("|") if p.strip()])
@@ -220,7 +227,7 @@ class Window(QMainWindow):
 
         def task(cancel, progress):
             inventory = index_sources(paths["source"], paths["product_root"], cancel)
-            return make_plan(
+            result = make_plan(
                 inventory,
                 paths["destination"][0] if paths["destination"] else None,
                 paths["scene"],
@@ -229,6 +236,10 @@ class Window(QMainWindow):
                 conflicts,
                 cancel,
             )
+            for key in ("source", "library"):
+                for item in result.configuration["sources" if key == "source" else "libraries"]:
+                    item["provenance"] = provenance[key]
+            return result
 
         self.start(task, self.show_plan)
 

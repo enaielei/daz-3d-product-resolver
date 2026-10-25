@@ -314,3 +314,37 @@ def test_gzip_scene_and_indirect_cycle(fixture):
     plan = make_plan(index_sources([source]), destination, [scene])
     assert len(plan.products) == 2
     assert not plan.blocked
+
+
+def test_index_reads_metadata_and_only_selected_payloads_are_hashed(fixture):
+    source, scene, destination = fixture
+    inventory = index_sources([source])
+    assert all(not e.sha256 for p in inventory.products for e in p.files)
+    plan = make_plan(inventory, destination, [scene])
+    assert all(len(e.sha256) == 64 for p in plan.products for e in p.files)
+
+
+def test_index_cancel_is_not_successful_empty_inventory(fixture):
+    source, _, _ = fixture
+    with pytest.raises(ResolverError, match="Cancelled"):
+        index_sources([source], cancel=lambda: True)
+
+
+def test_dson_node_qualified_references():
+    assert references(
+        dson(
+            "Figure:#local?value",
+            "Figure:/data/morph.dsf#shape?value",
+            "name:/Figure:../b.dsf#shape?value",
+            "id:/Figure:/data/a%23b.dsf#shape?value",
+        ),
+        "data/sub/a.dsf",
+    ) == ["data/morph.dsf", "data/b.dsf", "data/a#b.dsf"]
+
+
+@pytest.mark.parametrize(
+    "value", ["C:/outside/file.dsf#id", "https://site/file.dsf#id", "file:///outside/file.dsf#id"]
+)
+def test_dson_network_and_drive_references_remain_unsupported(value):
+    with pytest.raises(ResolverError):
+        references(dson(value))

@@ -26,6 +26,22 @@ def relative(value: str) -> str:
 
 
 def reference(value: str, parent: str = "") -> str | None:
+    # DSON object addressing is [id:/|name:/]node:file#asset?property.
+    # A node selector is not an operating-system drive or a network URI.
+    original = value
+    for prefix in ("id:/", "name:/"):
+        if value.startswith(prefix):
+            value = value[len(prefix) :]
+            break
+    if ":" in value.split("#", 1)[0]:
+        node, value = value.split(":", 1)
+        if (
+            "#" not in original
+            or len(node) == 1
+            or node.casefold() in {"http", "https", "file", "ftp", "data"}
+            or ":" in value.split("#", 1)[0]
+        ):
+            raise ResolverError(f"Unsupported external URI: {original}")
     raw = value.split("#", 1)[0]
     if not raw:
         return None

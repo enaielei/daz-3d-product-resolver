@@ -6,7 +6,7 @@ import json
 
 from .paths import ResolverError, reference
 
-MAX_DSON_BYTES = 64 * 1024**2
+MAX_DSON_BYTES = 256 * 1024**2
 DSON_SUFFIXES = {".duf", ".dsf"}
 
 
@@ -27,6 +27,19 @@ def references(data: bytes, parent: str = "") -> list[str]:
     def walk(node, context=""):
         if isinstance(node, dict):
             for key, value in node.items():
+                if key in {
+                    "asset_info",
+                    "vertices",
+                    "normals",
+                    "polylist",
+                    "uvs",
+                    "deltas",
+                    "vertex_weights",
+                    "joint_weights",
+                    "polygon_groups",
+                    "polygon_material_groups",
+                }:
+                    continue
                 # DSON instance URLs, image maps, UV sets and channel image files.
                 if key in {"url", "image_file"} and isinstance(value, str):
                     if key == "image_file" or context != "asset_info":
