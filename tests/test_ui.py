@@ -21,7 +21,7 @@ def test_ui_plan_matches_engine_and_installs(qtbot, fixture):
     window.install_button.click()
     qtbot.waitUntil(lambda: not window.worker.isRunning(), timeout=15000)
     assert (destination / "Props/whole.txt").exists()
-    assert '"written": 5' in window.output.toPlainText()
+    qtbot.waitUntil(lambda: '"written": 5' in window.output.toPlainText(), timeout=5000)
 
 
 def test_edit_invalidates_reviewed_plan(qtbot, fixture):

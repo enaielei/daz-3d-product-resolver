@@ -155,16 +155,28 @@ def test_stale_plan_rejected_before_writes(fixture, change):
 def test_cancel_rolls_back_and_preserves_user_changes(fixture):
     source, _, destination = fixture
     stopped = False
+    changed = []
 
-    def progress(*_):
+    def progress(current, total, name):
         nonlocal stopped
-        (destination / "data/a.dsf").write_bytes(b"user edit")
+        target = destination / name
+        target.write_bytes(b"user edit")
+        changed.append(target)
         stopped = True
 
     with pytest.raises(ResolverError, match="Cancelled"):
         install(make_plan(index_sources([source]), destination), lambda: stopped, progress)
-    assert (destination / "data/a.dsf").read_bytes() == b"user edit"
-    assert not (destination / "People/optional.duf").exists()
+    assert changed[0].read_bytes() == b"user edit"
+    assert (
+        len(
+            [
+                p
+                for p in destination.rglob("*")
+                if p.is_file() and ".daz-product-resolver" not in p.parts
+            ]
+        )
+        == 1
+    )
     assert any(recover(destination).values())
 
 

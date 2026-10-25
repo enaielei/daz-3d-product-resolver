@@ -70,7 +70,7 @@ class Window(QMainWindow):
             row = QHBoxLayout()
             row.addWidget(QLabel(label))
             edit = QLineEdit()
-            edit.setPlaceholderText("One path per line below; use Browse to add")
+            edit.setPlaceholderText("Use Browse to add; separate multiple paths with |")
             self.inputs[key] = edit
             row.addWidget(edit, 1)
             button = QPushButton("Browse…")
