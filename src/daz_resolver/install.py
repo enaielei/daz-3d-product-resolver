@@ -154,12 +154,16 @@ def install(
                 raise ResolverError(f"Destination changed during install: {op.path}")
             temporary = transaction / "payload.tmp"
             products[op.product].stage(op.entry, temporary, cancel)
+            if (file_digest(target) if target.exists() else None) != op.expected:
+                raise ResolverError(f"Destination changed while staging: {op.path}")
             backup = None
             if op.action == "replace":
                 backup = f"backup/{i}"
                 backup_path = transaction / backup
                 backup_path.parent.mkdir(exist_ok=True)
                 shutil.copyfile(target, backup_path)
+                if file_digest(backup_path) != op.expected:
+                    raise ResolverError(f"Destination changed while backing up: {op.path}")
             state["writes"].append(
                 {
                     "path": op.path,
