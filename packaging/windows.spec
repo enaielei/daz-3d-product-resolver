@@ -14,7 +14,8 @@ root = Path(SPECPATH).parent
 a = Analysis(
     [str(root / 'packaging' / 'desktop.py')],
     pathex=[str(root / 'src')],
-    binaries=[], datas=[], hiddenimports=[], hookspath=[], hooksconfig={},
+    binaries=[], datas=[(str(root / 'src/daz_resolver/assets'), 'daz_resolver/assets')],
+    hiddenimports=[], hookspath=[], hooksconfig={},
     runtime_hooks=[], excludes=['PySide6.QtWebEngineCore', 'PySide6.QtWebEngineWidgets'],
     noarchive=False,
 )

@@ -10,6 +10,10 @@ certificate or publisher reputation is claimed. Only use files from this reposit
 
 ## 1. Choose content
 
+![Choose scenes and product folders](images/choose-content.png)
+
+Screenshots use synthetic example names, not purchased content or personal paths.
+
 **Find missing content for my scenes** checks .duf/.dsf scenes or presets. Add one or more files
 with **Add scene files**, or drag them into the list.
 
@@ -36,6 +40,8 @@ Choose an **installation library** explicitly. If you only want to inspect depen
 again to inspect conflicts there.
 
 ## 3. Review and install
+
+![Review whole products before installation](images/review.png)
 
 The review shows selected product folders/packages, their sizes and file counts. A missing file
 selects its **whole containing product**, including related content. Optional unreferenced

@@ -53,7 +53,12 @@ QListWidget { background: #fbfdfb; border: 1px solid #e0e8e2; border-radius: 6px
 QListWidget::item { padding: 7px; border-bottom: 1px solid #edf1ee; }
 QListWidget::item:selected { background: #dceee5; color: #184d3e; }
 QRadioButton, QCheckBox { spacing: 9px; padding: 5px 0; }
-QRadioButton::indicator, QCheckBox::indicator { width: 17px; height: 17px; }
+QRadioButton::indicator { width: 16px; height: 16px; border: 1px solid #819e92;
+    border-radius: 9px; background: white; }
+QRadioButton::indicator:checked { width: 8px; height: 8px; border: 5px solid #247564; }
+QCheckBox::indicator { width: 17px; height: 17px; border: 1px solid #819e92;
+    border-radius: 3px; background: white; }
+QCheckBox::indicator:checked { image: url('@CHECK@'); border-color: #247564; }
 QTableWidget, QTreeWidget, QTextEdit { background: white; border: 1px solid #dde5df;
     border-radius: 6px; alternate-background-color: #f8faf8;
     selection-background-color: #deeee5; selection-color: #183c3e; }
@@ -70,6 +75,10 @@ QToolButton { border: none; color: #496e60; padding: 8px 0; }
 QScrollArea { border: none; background: transparent; }
 QToolTip { background: #173b3e; color: white; padding: 5px; border: none; }
 """
+
+
+def application_style():
+    return STYLE.replace("@CHECK@", (Path(__file__).parent / "assets/check.svg").as_posix())
 
 
 def light_palette():

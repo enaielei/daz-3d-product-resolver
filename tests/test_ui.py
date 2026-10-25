@@ -179,3 +179,21 @@ def test_cancel_keeps_navigation_locked_until_worker_stops(qtbot):
     assert "Operation cancelled" in window.notice.text()
     assert window.next_button.isEnabled()
     assert not window.install_button.isEnabled()
+
+
+def test_ambiguity_dropdown_selects_containing_product(qtbot, fixture):
+    source, _, _ = fixture
+    other = source / "Other/data"
+    other.mkdir(parents=True)
+    (other / "a.dsf").write_text('{"asset_info": {}, "scene": {}}')
+    window = configured(qtbot, fixture)
+    checked(qtbot, window)
+    assert window.plan.ambiguities
+    combo = window.attention.findChildren(QComboBox)[0]
+    candidate = next(i for i in range(combo.count()) if "Other" in combo.itemText(i))
+    combo.setCurrentIndex(candidate)
+    assert not window.install_button.isEnabled()
+    checked(qtbot, window)
+    assert not window.plan.blocked
+    assert len(window.plan.products) == 1
+    assert Path(window.plan.products[0].source).name == "Other"

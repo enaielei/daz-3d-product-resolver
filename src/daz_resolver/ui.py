@@ -36,11 +36,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from . import __version__
 from .discovery import discover, selected_paths
 from .engine import make_plan
 from .index import index_sources
 from .install import install
-from .ui_widgets import STYLE, PathPicker, card, label, light_palette, size_text
+from .ui_widgets import PathPicker, application_style, card, label, light_palette, size_text
 
 
 class Worker(QThread):
@@ -67,7 +68,7 @@ class Window(QMainWindow):
         self.resize(1120, 860)
         self.setMinimumSize(940, 720)
         self.setPalette(light_palette())
-        self.setStyleSheet(STYLE)
+        self.setStyleSheet(application_style())
         self.worker = self.plan = self.inventory = self.discovery = None
         self.busy = False
         self.operation = "check"
@@ -101,6 +102,7 @@ class Window(QMainWindow):
             self.steps.append(button)
         left.addStretch()
         left.addWidget(label("LOCAL & OFFLINE", "sidebarNote"))
+        left.addWidget(label(f"v{__version__} · Preview", "sidebarNote"))
         left.addWidget(
             label("Uses the products you already\nhave. Copies whole products.", "sidebarNote")
         )
