@@ -1,6 +1,8 @@
 import gzip
 import json
 import stat
+import subprocess
+import sys
 import zipfile
 
 import pytest
@@ -348,3 +350,30 @@ def test_dson_node_qualified_references():
 def test_dson_network_and_drive_references_remain_unsupported(value):
     with pytest.raises(ResolverError):
         references(dson(value))
+
+
+def test_abrupt_process_exit_recovers_original_replacement(tmp_path):
+    source = tmp_path / "source"
+    (source / "data").mkdir(parents=True)
+    (source / "data/file.txt").write_text("new")
+    destination = tmp_path / "library"
+    (destination / "data").mkdir(parents=True)
+    (destination / "data/file.txt").write_text("old")
+    script = """
+import os, sys
+from pathlib import Path
+from daz_resolver.index import index_sources
+from daz_resolver.engine import make_plan
+from daz_resolver.install import install
+plan = make_plan(index_sources([Path(sys.argv[1])]), Path(sys.argv[2]),
+                 conflicts={'data/file.txt': 'replace'})
+install(plan, progress=lambda *_: os._exit(17))
+"""
+    process = subprocess.run(
+        [sys.executable, "-c", script, str(source), str(destination)], check=False, timeout=30
+    )
+    assert process.returncode == 17
+    assert (destination / "data/file.txt").read_text() == "new"
+    assert list(recover(destination).values()) == [[]]
+    assert (destination / "data/file.txt").read_text() == "old"
+    assert (source / "data/file.txt").read_text() == "new"
