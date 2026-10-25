@@ -165,10 +165,12 @@ class Window(QMainWindow):
 
     def page(self):
         content = QWidget()
+        content.setObjectName("pageContent")
         layout = QVBoxLayout(content)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(13)
         scroll = QScrollArea()
+        scroll.viewport().setObjectName("pageViewport")
         scroll.setWidgetResizable(True)
         scroll.setWidget(content)
         self.pages.addWidget(scroll)

@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 STYLE = """
 QWidget { font-family: 'Segoe UI'; font-size: 13px; color: #243b43; }
 QMainWindow, QWidget#canvas { background: #f3f6f5; }
+QWidget#pageContent, QWidget#pageViewport { background: #f3f6f5; }
 QFrame#sidebar { background: #173b3e; border: none; }
 QFrame#sidebar QLabel { color: #c8dcd8; background: transparent; }
 QLabel#brand { color: white; font-size: 20px; font-weight: 700; }
