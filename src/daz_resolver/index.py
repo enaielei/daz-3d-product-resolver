@@ -122,13 +122,21 @@ def validate_member(info: zipfile.ZipInfo):
         raise ResolverError(f"Archive resource limit: {info.filename}")
 
 
-def materialize(product: Product, cancel: Callable[[], bool] = lambda: False):
+def materialize(
+    product: Product,
+    cancel: Callable[[], bool] = lambda: False,
+    progress: Callable[[int, int, str], None] = lambda *_: None,
+    only: set[str] | None = None,
+):
     """Stream selected payload hashes, without extracting ZIPs or loading whole files."""
     source = Path(product.source)
     safe_target(source.parent, source.name)
     archive = zipfile.ZipFile(source) if product.archive else None
+    entries = [e for e in product.files if only is None or e.path.casefold() in only]
+    total = sum(e.size for e in entries if not e.sha256)
+    done = 0
     try:
-        for entry in product.files:
+        for entry in entries:
             if cancel():
                 raise ResolverError("Cancelled")
             if entry.sha256:
@@ -151,6 +159,8 @@ def materialize(product: Product, cancel: Callable[[], bool] = lambda: False):
                     if size > entry.size:
                         raise ResolverError("Source changed during planning")
                     h.update(chunk)
+                    done += len(chunk)
+                    progress(done, total, f"Comparing payload bytes · {source.name}")
             if size != entry.size:
                 raise ResolverError("Source changed during planning")
             entry.sha256 = h.hexdigest()
@@ -159,13 +169,20 @@ def materialize(product: Product, cancel: Callable[[], bool] = lambda: False):
             archive.close()
 
 
-def archive_product(path: Path, hash_files: bool = True) -> Product:
+def archive_product(
+    path: Path,
+    hash_files: bool = True,
+    cancel: Callable[[], bool] = lambda: False,
+    progress: Callable[[int, int, str], None] = lambda *_: None,
+) -> Product:
     entries = []
     with zipfile.ZipFile(path) as archive:
         infos = archive.infolist()
         if len(infos) > MAX_FILES or sum(i.file_size for i in infos) > MAX_PACKAGE_BYTES:
             raise ResolverError("Archive resource limit")
         for info in infos:
+            if cancel():
+                raise ResolverError("Cancelled")
             validate_member(info)
         files = [i for i in infos if not i.is_dir()]
         names = {i.filename.casefold(): i for i in files}
@@ -208,16 +225,25 @@ def archive_product(path: Path, hash_files: bool = True) -> Product:
         raise ResolverError("Empty/unsupported package")
     product = Product(digest(str(path).encode())[:16], str(path), True, entries)
     if hash_files:
-        materialize(product)
+        materialize(product, cancel, progress)
     return product
 
 
-def extracted_product(path: Path, hash_files: bool = True) -> Product:
+def extracted_product(
+    path: Path,
+    hash_files: bool = True,
+    cancel: Callable[[], bool] = lambda: False,
+    progress: Callable[[int, int, str], None] = lambda *_: None,
+) -> Product:
     entries = []
     total = 0
     wrappers = [p for p in path.iterdir() if p.is_dir() and p.name.casefold() in WRAPPERS]
     wrapper = wrappers[0] if len(wrappers) == 1 else None
-    for item in sorted(path.rglob("*")):
+    for number, item in enumerate(path.rglob("*")):
+        if cancel():
+            raise ResolverError("Cancelled")
+        if number % 100 == 0:
+            progress(number, 0, f"Indexing extracted files · {path.name}")
         safe_target(path, item.relative_to(path).as_posix())
         if not item.is_file():
             continue
@@ -237,9 +263,10 @@ def extracted_product(path: Path, hash_files: bool = True) -> Product:
         if size > MAX_FILE_BYTES or total > MAX_PACKAGE_BYTES or len(entries) >= MAX_FILES:
             raise ResolverError("Extracted product resource limit")
         entries.append(Entry(target, name, size, ""))
+    entries.sort(key=lambda entry: entry.member)
     product = Product(digest(str(path).encode())[:16], str(path), False, entries)
     if hash_files:
-        materialize(product)
+        materialize(product, cancel, progress)
     return product
 
 
@@ -248,6 +275,7 @@ def index_sources(
     product_roots: list[Path] | None = None,
     cancel: Callable[[], bool] = lambda: False,
     hash_files: bool = False,
+    progress: Callable[[int, int, str], None] = lambda *_: None,
 ) -> Inventory:
     result = Inventory()
     roots: set[Path] = set()
@@ -258,6 +286,7 @@ def index_sources(
         if cancel():
             raise ResolverError("Cancelled")
         safe_target(path.parent, path.name)
+        progress(0, 0, f"Discovering product folders · {path.name}")
         if path.is_file():
             if path.suffix.casefold() == ".zip":
                 archives.add(path)
@@ -298,11 +327,15 @@ def index_sources(
             if cancel():
                 raise ResolverError("Cancelled") from exc
             result.reports.append(f"{source}: {exc}")
-    for path in sorted(roots | archives):
+    paths = sorted(roots | archives)
+    for number, path in enumerate(paths):
         try:
             if cancel():
                 raise ResolverError("Cancelled")
-            product = (archive_product if path in archives else extracted_product)(path, hash_files)
+            progress(number, len(paths), f"Indexing product inventories · {path.name}")
+            product = (archive_product if path in archives else extracted_product)(
+                path, hash_files, cancel, progress
+            )
             keys = [entry.path.casefold() for entry in product.files]
             if len(keys) != len(set(keys)):
                 raise ResolverError("Case-colliding product files")

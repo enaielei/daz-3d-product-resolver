@@ -68,6 +68,7 @@ def plan(
             pairs(conflict or []),
         ).to_dict()
         result["configuration"] = {
+            **result["configuration"],
             "sources": [
                 {"path": str(p), "provenance": "user" if source else "detected"} for p in sources
             ],

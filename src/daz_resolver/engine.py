@@ -28,6 +28,7 @@ class Plan:
     ambiguities: dict[str, list[str]] = field(default_factory=dict)
     reports: list[str] = field(default_factory=list)
     configuration: dict = field(default_factory=dict)
+    overlaps: dict[str, list[str]] = field(default_factory=dict)
 
     @property
     def estimated_bytes(self):
@@ -38,6 +39,7 @@ class Plan:
         return bool(
             self.missing
             or self.ambiguities
+            or self.overlaps
             or any(o.action == "conflict" for o in self.operations)
             or any(r.startswith("ERROR:") for r in self.reports)
         )
@@ -58,6 +60,7 @@ class Plan:
             data.get("ambiguities", {}),
             data.get("reports", []),
             data.get("configuration", {}),
+            data.get("overlaps", {}),
         )
 
 
@@ -78,6 +81,32 @@ def library_file(library: Path, name: str) -> Path | None:
     return current if current.is_file() else None
 
 
+class LibraryLookup:
+    """Directory snapshots scoped to one read-only planning operation, never reused on install."""
+
+    def __init__(self):
+        self.directories = {}
+
+    def find(self, library: Path, name: str) -> Path | None:
+        current = library.absolute()
+        for part in relative(name).split("/"):
+            if current not in self.directories:
+                safe_target(current.parent, current.name)
+                listing = {}
+                if current.is_dir():
+                    for child in current.iterdir():
+                        listing.setdefault(child.name.casefold(), []).append(child)
+                self.directories[current] = listing
+            matches = self.directories[current].get(part.casefold(), [])
+            if len(matches) > 1:
+                raise ResolverError(f"Case-colliding library path: {name}")
+            if not matches:
+                return None
+            current = matches[0]
+        safe_target(library, current.relative_to(library).as_posix())
+        return current if current.is_file() else None
+
+
 def make_plan(
     inventory: Inventory,
     destination: Path | None = None,
@@ -86,10 +115,12 @@ def make_plan(
     choices: dict[str, str] | None = None,
     conflicts: dict[str, str] | None = None,
     cancel: Callable[[], bool] = lambda: False,
+    progress: Callable[[int, int, str], None] = lambda *_: None,
 ) -> Plan:
     choices, conflicts = choices or {}, conflicts or {}
     plan = Plan(str(destination.absolute()) if destination else None, [], [])
     plan.configuration = {
+        "payload_verification": "full-selected-products" if destination else "shared-files-only",
         "sources": [{"path": p.source, "provenance": "user"} for p in inventory.products],
         "libraries": [{"path": str(p), "provenance": "user"} for p in libraries or []],
         "destination": {"path": str(destination) if destination else None, "provenance": "user"},
@@ -102,6 +133,7 @@ def make_plan(
         for entry in product.files:
             lookup.setdefault(entry.path.casefold(), []).append((product, entry))
     selected = {}
+    finder = LibraryLookup()
     visited = set()
     queue: list[tuple[str, bytes]] = []
     libraries = list(dict.fromkeys([p.absolute() for p in libraries or []]))
@@ -128,6 +160,7 @@ def make_plan(
         if cancel():
             raise ResolverError("Cancelled")
         parent, data = queue.pop()
+        progress(len(visited), 0, f"Reading scene references · {parent or 'selected scene'}")
         try:
             refs = references(data, parent)
         except (ValueError, OSError, EOFError, RecursionError) as exc:
@@ -139,7 +172,7 @@ def make_plan(
                 continue
             visited.add(key)
             try:
-                existing = next((p for lib in libraries if (p := library_file(lib, name))), None)
+                existing = next((p for lib in libraries if (p := finder.find(lib, name))), None)
                 if existing:
                     if existing.suffix.casefold() in DSON_SUFFIXES:
                         with existing.open("rb") as stream:
@@ -157,7 +190,7 @@ def make_plan(
                 # Full product inventories must agree, not merely the referenced file.
                 if len(candidates) > 1:
                     for candidate, _ in candidates:
-                        materialize(candidate, cancel)
+                        materialize(candidate, cancel, progress=progress)
                 signatures = {
                     tuple((e.path.casefold(), e.sha256) for e in p.files) for p, _ in candidates
                 }
@@ -169,22 +202,47 @@ def make_plan(
                 if Path(name).suffix.casefold() in DSON_SUFFIXES:
                     queue.append((entry.path, product.read(entry, MAX_DSON_BYTES)))
             except (OSError, ValueError, BadZipFile, RuntimeError) as exc:
+                if cancel():
+                    raise ResolverError("Cancelled") from exc
                 plan.reports.append(f"ERROR: {name}: {exc}")
     plan.products = list(selected.values())
+    providers = {}
+    for product in plan.products:
+        for entry in product.files:
+            providers.setdefault(entry.path.casefold(), []).append((product, entry))
+    # A preview needs payload hashes only where sources overlap, not for every unique file.
+    shared = {
+        key
+        for key, entries in providers.items()
+        if len(entries) > 1 and len({e.size for _, e in entries}) == 1
+    }
+    for product in plan.products:
+        progress(0, 0, f"Comparing product files · {Path(product.source).name}")
+        try:
+            materialize(product, cancel, progress=progress, only=None if destination else shared)
+        except (OSError, ValueError, BadZipFile, RuntimeError) as exc:
+            if cancel():
+                raise ResolverError("Cancelled") from exc
+            plan.reports.append(f"ERROR: {product.source}: {exc}")
+    for key, entries in providers.items():
+        if len({(e.size, e.sha256) for _, e in entries}) > 1:
+            name = entries[0][1].path
+            chosen = choices.get(name, choices.get(key))
+            if chosen not in {p.id for p, _ in entries}:
+                plan.overlaps[name] = [p.id for p, _ in entries]
     targets: dict[str, Operation] = {}
     for product in plan.products:
-        try:
-            materialize(product, cancel)
-        except (OSError, ValueError, BadZipFile, RuntimeError) as exc:
-            plan.reports.append(f"ERROR: {product.source}: {exc}")
-            continue
         for entry in product.files:
+            if cancel():
+                raise ResolverError("Cancelled")
             key = entry.path.casefold()
-            if key in targets:
-                if targets[key].entry.sha256 != entry.sha256:
-                    plan.reports.append(f"ERROR: Selected products disagree: {entry.path}")
+            chosen = choices.get(entry.path, choices.get(key))
+            if chosen and chosen in {p.id for p, _ in providers[key]} and product.id != chosen:
                 continue
-            target = library_file(destination.absolute(), entry.path) if destination else None
+            if key in targets:
+                continue
+            progress(len(targets), len(providers), f"Checking install library · {entry.path}")
+            target = finder.find(destination.absolute(), entry.path) if destination else None
             expected = file_digest(target) if target else None
             action = (
                 "copy"
@@ -202,4 +260,5 @@ def make_plan(
             )
             targets[key] = op
             plan.operations.append(op)
+    progress(len(providers), len(providers), "Check complete")
     return plan

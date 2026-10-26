@@ -2,6 +2,16 @@
 
 A self-contained offline dependency resolver with a guided desktop interface. No Python setup required.
 
+### Preview 2 fixes
+
+- Check-only install-all defers unique payload verification; phase/count/byte progress and
+  operation-scoped library lookup caching make work visible and avoid repeated directory scans.
+- Shared source-file disagreements now show explicit providers and choices instead of generic errors.
+- Centralized theme tokens cover dialogs, menus, dropdowns and scrollbars; Daz 3D branding is consistent.
+- Sidebar completion/attention states, pixel wheel scrolling, paged attention lists and bounded
+  technical summaries keep large results manageable. Full report export runs in the background.
+- Private local diagnostic logs include build, inputs, timing, phases and bounded result samples.
+
 ### Download
 
 - **windows-x64-setup.exe** — recommended per-user installation with Start menu entry and uninstaller.

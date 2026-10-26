@@ -76,3 +76,25 @@ deleted. See [troubleshooting](troubleshooting.md) for interrupted transactions.
 This is a static reference resolver. Scripts, dynamic/autoload dependencies and proprietary
 encrypted formats are not exhaustively handled. There are bounded file/archive limits.
 Technical JSON is optional; you do not need to edit it to use the desktop app.
+
+## Check progress and diagnostics (preview 2)
+
+Checking reports discovery, inventory, shared-payload comparison and library-lookup phases.
+Install-all can involve large source sets. **Check only** compares overlapping files and defers
+verification of unique payloads until an install library is chosen; it is not an exhaustive integrity
+scan of every archive. Actual installation still revalidates full selected product inventories/hashes.
+
+If selected products contain different versions of the same library-relative file, choose which
+product supplies that file, or remove an unwanted source collection and check again. No source is
+silently preferred. Products remain selected whole; their shared destination path is written once
+using the explicit provider choice. Existing-destination keep/replace decisions are separate.
+
+The sidebar shows which steps are done, running or need attention. Long attention lists have
+Previous/Next controls. Technical details are a small summary; **Export full check report** saves
+all file/provider records without formatting the entire inventory in the window.
+
+Private local diagnostics record operation inputs, phases, elapsed time and bounded result samples.
+On Windows they live under `%LOCALAPPDATA%/daz-3d-product-resolver/logs`. Use **Open private
+diagnostic logs** to find them. Logs/reports can contain local paths and product names; review/redact
+them before sharing. No account fields or product payloads are logged, and nothing is uploaded.
+Preview 1 did not persist check-only logs, so its past checks cannot be reconstructed from logs alone.

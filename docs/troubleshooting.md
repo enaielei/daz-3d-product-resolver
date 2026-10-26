@@ -30,3 +30,13 @@ Do not change Windows security settings for this tool.
 **Report a problem.** Use [Issues](https://github.com/enaielei/daz-3d-product-resolver/issues),
 include the app version, Windows version and a synthetic reproduction. Technical details may
 contain private local paths and purchased product names; redact them before sharing publicly.
+
+**A check seems stuck.** Preview 2 shows phases and counts/bytes rather than only an indeterminate
+bar. Shared payload comparisons still require disk reads. Check-only mode defers unrelated payload
+verification, and cancellation is checked during indexing/hashing. Local diagnostic logs record the
+phase/timing. Preview 1 produced no persistent check-only logs.
+
+**Selected products disagree.** This means two selected products map different payloads to the same
+destination path. Preview 1 correctly blocked installation but only showed a generic message.
+Preview 2 names the path/providers and offers an explicit provider choice. Check again afterward;
+no files are overwritten by this choice during preview.

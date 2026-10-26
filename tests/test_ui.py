@@ -197,3 +197,101 @@ def test_ambiguity_dropdown_selects_containing_product(qtbot, fixture):
     assert not window.plan.blocked
     assert len(window.plan.products) == 1
     assert Path(window.plan.products[0].source).name == "Other"
+
+
+def test_sidebar_marks_complete_ready_and_attention(qtbot, fixture):
+    window = configured(qtbot, fixture)
+    assert window.step_states == ["done", "done", "todo"]
+    checked(qtbot, window)
+    assert window.step_states == ["done", "done", "ready"]
+    window.plan.missing.append("missing.txt")
+    window.show_plan(window.plan)
+    assert window.step_states[2] == "attention"
+    assert "Needs attention" in window.steps[2].text()
+
+
+def test_large_results_are_paged_and_never_format_full_plan_on_ui_thread(qtbot, monkeypatch):
+    from daz_resolver.engine import Operation, Plan
+    from daz_resolver.index import Entry, Product
+
+    entries = [Entry(f"data/{i}.txt", f"data/{i}.txt", 1, "") for i in range(20_000)]
+    product = Product("sample", "Synthetic product", False, entries)
+    operations = [Operation(e.path, product.id, e, None, "copy") for e in entries]
+    plan = Plan(None, [product], operations, missing=[f"missing/{i}.txt" for i in range(350)])
+
+    def forbidden(*_):
+        raise AssertionError("Full plan serialized on UI thread")
+
+    monkeypatch.setattr(Plan, "to_dict", forbidden)
+    window = Window()
+    qtbot.addWidget(window)
+    window.show_plan(plan)
+    assert len(window.output.toPlainText()) < 128_000
+    assert window.attention.topLevelItemCount() == 100
+    assert window.next_attention.isEnabled()
+    window.next_attention.click()
+    assert "101–200 of 350" in window.attention_count.text()
+    assert window.attention.topLevelItem(0).text(0) == "missing/100.txt"
+
+
+def test_help_dialog_and_scrollbars_use_shared_theme(qtbot):
+    from PySide6.QtWidgets import QPlainTextEdit
+
+    from daz_resolver.theme import TOKENS, application_style
+
+    window = Window()
+    qtbot.addWidget(window)
+    window.help()
+    dialog = window.help_dialog
+    assert "Daz 3D Product Resolver" in dialog.windowTitle()
+    assert "QMessageBox" in dialog.styleSheet()
+    assert "QScrollBar::handle:vertical" in application_style()
+    assert "@" not in application_style()
+    assert TOKENS["text"] != TOKENS["surface"]
+    assert isinstance(window.output, QPlainTextEdit)
+    assert window.output.height() == 200
+    dialog.close()
+
+
+def test_progress_accepts_more_than_two_gigabytes_and_is_throttled(qtbot):
+    from daz_resolver.ui import Worker
+
+    worker = Worker(lambda *_: None)
+    events = []
+    worker.progress.connect(lambda *value: events.append(value))
+    for i in range(10_000):
+        worker.report(i, 10_000, "Comparing payload bytes · example.zip")
+    assert len(events) < 100
+    window = Window()
+    qtbot.addWidget(window)
+    window.show_progress(3 * 1024**3, 6 * 1024**3, "Comparing payload bytes · example.zip")
+    assert window.progress.value() == 500
+    assert "3.0 GB / 6.0 GB" in window.activity_label.text()
+
+
+def test_pixel_wheel_scrolls_a_predictable_distance(qtbot):
+    from PySide6.QtCore import QPoint, QPointF, Qt
+    from PySide6.QtGui import QWheelEvent
+    from PySide6.QtWidgets import QWidget
+
+    from daz_resolver.ui_widgets import PageScrollArea
+
+    area = PageScrollArea()
+    qtbot.addWidget(area)
+    content = QWidget()
+    content.setMinimumHeight(2000)
+    area.setWidget(content)
+    area.resize(400, 300)
+    area.show()
+    event = QWheelEvent(
+        QPointF(50, 50),
+        QPointF(50, 50),
+        QPoint(),
+        QPoint(0, -120),
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+        Qt.ScrollPhase.ScrollUpdate,
+        False,
+    )
+    area.wheelEvent(event)
+    assert area.verticalScrollBar().value() == 48
