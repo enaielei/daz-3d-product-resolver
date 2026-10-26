@@ -47,3 +47,17 @@ each decision invalidates the reviewed plan until the user checks again. The com
 remains in an optional technical-details panel. Folder and mode changes invalidate installation.
 Core CI on three OSes is distinct from desktop acceptance: only Windows is a packaging target.
 Real source previews are local private outputs, never committed or used for installation tests.
+
+Planning caches directory listings only for the lifetime of a single operation. The installer
+does not reuse that cache and still revalidates sources/destinations before writes. A preview
+without a destination hashes overlapping same-sized payloads for comparison, and uses differing
+sizes as disagreement evidence. Unique payload hashing is deferred until a destination is chosen.
+Those metadata previews cannot be converted into installs by editing their destination: payload
+hash validation rejects them. Source overlaps require explicit provider choices and keep both
+whole products' inventory union; the shared destination path is written once.
+
+Phased progress/cancellation remain portable callbacks. Qt throttles progress events rather than
+queueing one signal per file/chunk. Private local JSONL diagnostics record inputs, build, elapsed
+time, phases and bounded summaries; they contain paths and product names and are never uploaded.
+Technical UI views are bounded plain-text summaries, and full plan export runs on a worker.
+The [theme contract](theme.md) covers every window/dialog/control and result scrolling behavior.

@@ -163,6 +163,10 @@ class Window(QMainWindow):
         self.progress = QProgressBar()
         self.progress.setTextVisible(False)
         activity_layout.addWidget(self.activity_label)
+        self.elapsed_label = label("", "muted")
+        activity_layout.addWidget(self.elapsed_label)
+        self.elapsed_timer = QTimer(self)
+        self.elapsed_timer.timeout.connect(self.update_elapsed)
         activity_layout.addWidget(self.progress)
         self.activity.hide()
         body.addWidget(self.activity)
@@ -597,6 +601,9 @@ class Window(QMainWindow):
         if operation in {"check", "install"}:
             self.check_failed = False
         self.busy = True
+        self.operation_started = time.monotonic()
+        self.update_elapsed()
+        self.elapsed_timer.start(1000)
         self.say("")
         self.activity.show()
         self.activity_label.setText(
@@ -626,6 +633,7 @@ class Window(QMainWindow):
 
     def finished(self):
         self.busy = False
+        self.elapsed_timer.stop()
         for index in (0, 1):
             self.pages.widget(index).setEnabled(True)
         self.inputs["destination"].setEnabled(not self.preview_only.isChecked())
@@ -653,7 +661,13 @@ class Window(QMainWindow):
             if "bytes" in path
             else f"{current} / {total}"
         )
-        self.activity_label.setText(f"{path} · {units}" if total else path)
+        self.activity_label.setText(
+            f"{path} · {units}" if total else (f"{path} · {current} processed" if current else path)
+        )
+
+    def update_elapsed(self):
+        elapsed = round(time.monotonic() - self.operation_started)
+        self.elapsed_label.setText(f"Elapsed {elapsed // 60:02d}:{elapsed % 60:02d}")
 
     def cancel(self):
         if self.worker:
